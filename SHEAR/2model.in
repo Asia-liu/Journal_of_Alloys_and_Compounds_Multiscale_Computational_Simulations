@@ -1,0 +1,33 @@
+##########################################################################
+#~/lammps/lammps-29Oct20/src/lmp_serial < model.in
+# step 1: Generate atoms configuration
+##########################################################################
+# setting Variable
+log Ni47_Cr25_Co2_Mo6_Fe20.txt
+variable		lat_cont	equal 3.59
+
+variable		fNi equal 47 #1
+variable 		fCr equal 25#2
+variable 		fCo equal 2 #3
+variable 		fMo equal 6 #4
+variable 		fFe equal 20 #5
+variable		randomseed equal 2345674
+########################################################################
+units		metal
+boundary	p p p
+atom_style	atomic
+variable	lattice equal  ${lat_cont}
+
+read_data Ni_edge_add.lmp
+
+
+
+
+set type 1 type/fraction 2 $((v_fCr+v_fCo+v_fMo+v_fFe)/100.0) 1234567  #Cr25_Co2_Mo6_Fe20
+set type 2 type/fraction 3 $((v_fCo+v_fMo+v_fFe)/(v_fCr+v_fCo+v_fMo+v_fFe)) 1234566 # Co2_Mo6_Fe20
+set type 3 type/fraction 4 $((v_fMo+v_fFe)/(v_fCo+v_fMo+v_fFe)) 1234565 #Mo6_Fe20
+set type 4 type/fraction 5 $((v_fFe)/(v_fMo+v_fFe)) 1234564  #MO  
+
+neigh_modify	delay 1 check yes
+########################################################################
+write_data Ni47Cr25Co2Mo6Fe20.data

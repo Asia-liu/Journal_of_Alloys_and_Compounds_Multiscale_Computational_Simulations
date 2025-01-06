@@ -1,0 +1,110 @@
+variable	sname index ms
+log		${sname}.log
+variable ustrain equal -1e8
+variable energyConv equal 160.21917     # conversion factor
+variable Etol equal 1.0e-12
+# ------------------------ INITIALIZATION ----------------------------
+units metal         
+dimension 3          
+boundary p p p       
+atom_style       atomic   
+read_data        CoNiMnCrFe.dataa
+neighbor        2.5  bin
+neigh_modify    delay 10 every 2 check yes one 30000 page 300000
+################################################################################
+pair_style      meam/c
+pair_coeff      * *  library.meam Co Ni Cr Fe Mn CoNiCrFeMn.meam Co Cr Ni Mn Fe  
+###################################################################################
+change_box all boundary p s p 
+variable yb equal 0.2
+# define the force to apply
+variable tmp2 equal lx
+variable LXX equal ${tmp2}
+variable tmp3 equal 280 #ly
+variable LYY equal ${tmp3}
+variable tmp4 equal lz
+variable LZZ equal ${tmp4} 
+variable udisp equal ${ustrain}*${LYY}*1e-12
+variable uall equal ${udisp}*step*0.001
+variable bs equal ${yb}*10000000
+velocity        all set 0.00 0.00 0.00 units box
+run 0
+change_box all boundary p p p 
+change_box		all		y	delta	-50	50	units box
+variable		randomseed equal 2345674
+velocity        all create 1.0 ${randomseed} dist gaussian
+run             0                             # temperature may not be 1K
+reset_timestep	0
+fix             1 all npt temp 1.0 1.0 0.01 iso 0.0 0.0 1.0 drag 1.8
+fix             2 all temp/rescale 5 1.0 1.0 0.1 1	
+run             2000
+unfix           1
+unfix           2
+reset_timestep	0
+fix             13 all nvt temp 1.0 1.0 0.01
+fix             14 all temp/rescale 5 1.0 1.0 0.1 1
+run             2000
+unfix           13
+unfix           14
+write_data      eq20_nvt_1.data
+change_box all boundary p p p 
+run 0
+reset_timestep	0
+# Output
+variable        tmp_x equal "lx"
+variable        L0_x equal ${tmp_x}
+print "Initial Length, L0_x: ${L0_x}"
+variable        tmp_y equal "ly"
+variable        L0_y equal ${tmp_y}
+print "Initial Length, L0_y: ${L0_y}"
+variable        tmp_z equal "lz"#lz=280
+variable        L0_z equal ${tmp_z}
+print "Initial Length, L0_z: ${L0_z}"
+
+# define groups 
+region          1 block INF INF INF 15 INF INF
+group           lower region 1
+region          2 block INF INF 295 INF INF INF
+group           upper region 2
+group           boundary union lower upper
+group           mobile subtract all boundary
+thermo          200
+thermo_style    custom step cpu etotal pe press pxx pyy pzz pxy pxz pyz vol density cpuremain temp
+fix		        15 all nvt temp 1.0 1.0 1.0
+fix             16 all temp/rescale 1 1.0 1.0 0.01 0.01
+fix 5 upper move linear ${udisp} 0.0 0.0 units box
+#fix 6 lower move linear -${udisp} 0.0 0.0 units box
+velocity        lower set 0.0 0.0 0.0
+fix             17 boundary setforce 0.0 0.0 0.0
+
+variable            tmpx equal lx
+variable            tmpy equal 280
+variable            tmpz equal lz
+variable            L0x equal ${tmpx}
+variable            L0y equal ${tmpy}
+variable            L0z equal ${tmpz}
+
+variable        	vol_ini equal v_L0x*v_L0y*v_L0z
+print "Initial volumn, vol = ${vol_ini}"
+# In units metal, pressure is in [bars]; sxx, syy, szz are in GPa
+compute         	2 mobile stress/atom NULL
+compute         	strsxy mobile reduce sum c_2[4]
+variable        	unit equal 1E-4
+
+variable        	sxy equal ${unit}*(c_strsxy/v_vol_ini)
+variable            deltaL  equal ${udisp}*step*0.001
+#variable            sxy equal "-pxy/10000"          # calculate shear stress
+variable            strain equal v_deltaL/280        # calculate shear strain
+variable            srate equal 0.01           
+dump            1 all custom 500000 dump.load.* id type x y z 
+dump_modify     1 sort id
+fix             def0 all print 1000 "${strain} ${sxy}" file Shear_data.txt screen no
+
+run             ${bs}
+unfix 15
+unfix 16
+unfix 17
+unfix 5
+#undump 1
+
+print           "All done"

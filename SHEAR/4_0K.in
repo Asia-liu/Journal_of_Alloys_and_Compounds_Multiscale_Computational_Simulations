@@ -1,0 +1,119 @@
+variable	sname index ms
+log		${sname}.log
+
+variable ustrain equal 6e-4
+variable energyConv equal 160.21917     # conversion factor
+variable Etol equal 1.0e-12
+
+# ------------------------ INITIALIZATION ----------------------------
+units metal         
+dimension 3          
+boundary p p p 
+        
+atom_style       full   
+read_data        eq20_npt_300_300.data
+neighbor        2.5  bin
+neigh_modify    delay 10 every 2 check yes one 30000 page 300000
+
+################################################################################
+################################################################################
+pair_style      meam/c
+pair_coeff      * *  library.meam Co Ni Cr Fe Mn CoNiCrFeMn.meam Co Cr Ni Mn Fe  
+###################################################################################
+change_box		all	y	delta	-100	100	
+# step 1: OPT
+reset_timestep	0
+velocity        all set 0.00 0.00 0.00 units box
+run 0
+min_style       sd
+min_modify      dmax 0.2
+compute         peratom all pe/atom
+compute			st			all	stress/atom	NULL
+compute			Stresses	all	reduce	ave	c_st[1]	c_st[2]	c_st[3]
+variable		xSt	atom	"c_st[1]/(vol*10000)"	#x	GPa
+variable		ySt	atom	"c_st[2]/(vol*10000)"	#y	GPa
+variable		zSt	atom	"c_st[3]/(vol*10000)"	#z	GPa
+dump			min_opt	all	custom	1000	eq20_opt.*	id	type	x	y	z	c_peratom	v_xSt	v_ySt	v_zSt
+minimize        1.0e-6  1.0e-8   1000    100000
+undump			min_opt
+write_data      eq20_min.data
+########################################################################
+reset_timestep	0
+########################################################################
+# -------------------------RELAXATION SETTINGS ---------------------------------
+variable tmp0 equal "ylo+31"
+variable ylo0 equal ${tmp0}
+variable tmp1 equal "yhi-31"
+variable yhi0 equal ${tmp1}
+
+region upper block INF INF 295 INF INF INF units box
+region lower block INF INF INF 15 INF INF units box
+
+group  upper region upper
+group  lower region lower
+group  boundary union upper lower
+group  mobile subtract all boundary
+
+# define the force to apply
+variable tmp2 equal lx
+variable LXX equal ${tmp2}
+variable tmp3 equal ly
+variable LYY equal 280
+variable tmp4 equal lz
+variable LZZ equal ${tmp4}
+
+variable udisp equal ${ustrain}*${LYY}
+
+velocity        all set 0.00 0.00 0.00 units box
+variable c loop 400
+label loopc
+
+variable tstrain equal ${ustrain}*($c-1)
+
+compute tfx upper reduce sum fx
+compute tfy upper reduce sum fy
+compute tfz upper reduce sum fz
+
+thermo          1
+thermo_style    custom step c_tfx c_tfy c_tfz
+
+run 0
+
+variable tfxx equal c_tfx
+variable tfyy equal c_tfy
+variable tfzz equal c_tfz
+
+variable sigmaxx equal -${tfxx}*${energyConv}/(${LXX}*${LZZ})     #####GPa
+variable sigmayy equal -${tfyy}*${energyConv}/(${LXX}*${LZZ})     #####GPa
+variable sigmazz equal -${tfzz}*${energyConv}/(${LXX}*${LZZ})     #####GPa
+
+#dump            1 all custom 1000000 dump.${c}.load id type x y z fx fy fz 
+#dump_modify     1 sort id
+
+thermo          20
+thermo_style    custom step cpu etotal pe press pxx pyy pzz pxy pxz pyz vol density lx ly lz cpuremain
+variable yy equal ly
+displace_atoms upper move -${udisp} 0.0 0.0 units box
+velocity        lower set 0.0 0.0 0.0
+fix 1 upper setforce 0.0 NULL NULL
+fix 2 lower setforce 0.0 NULL NULL
+
+min_style cg
+minimize  ${Etol} ${Etol} 100000 100000
+
+min_style fire
+minimize  ${Etol} ${Etol} 100000 100000
+
+print "${c} ${tstrain} ${ustrain} ${udisp} ${sigmaxx} ${sigmayy} ${sigmazz}" append strain-stress.txt
+
+uncompute tfx
+uncompute tfy
+uncompute   tfz
+unfix 1
+unfix 2
+#undump 1
+
+next c
+jump ten2.in loopc 
+
+print           "All done"
