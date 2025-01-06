@@ -1,0 +1,42 @@
+##########################################################################
+#~/lammps/lammps-29Oct20/src/lmp_serial < in1.txt
+# step 1: Generate atoms configuration
+##########################################################################
+# setting Variable
+log Ni62Cr22Co8Al5Mo3Fe1.txt
+variable		lat_cont	equal 3.53
+
+variable		fNi equal 62 #1
+variable 		fCr equal 22 #2
+variable 		fCo equal 8 #3
+variable 		fAl equal 5 #4
+variable 		fMo equal 3 #5
+variable 		fFe equal 1 #6
+variable		randomseed equal 2345674
+########################################################################
+units		metal
+boundary	s s s
+atom_style	full
+
+read_data 99_gama.data
+
+region		a block -10 10 -10 10 -10 10 units box
+region		b block -10 10 30 50 -10 10 units box
+region		c block -10 10 70 90 -10 10 units box
+region		d block -10 10 -50 -30 -10 10 units box 
+region		e block -10 10 -90 -70 -10 10 units box
+
+region ub union 5 a b c d e 
+
+group ub region ub
+
+delete_atoms group ub
+	
+neigh_modify	delay 1 check yes
+
+
+	
+########################################################################
+# step 2: write_data equimolar.data
+########################################################################
+write_data gama.data
