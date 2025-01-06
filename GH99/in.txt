@@ -1,0 +1,19 @@
+#~/lammps/lammps-29Oct20/src/lmp_serial < in.txt
+
+units		metal
+boundary	p p p
+atom_style	full
+read_data gama.data
+read_data equbottom.data add append
+
+
+#delete_atoms overlap 0.5 all all
+change_box all boundary s s s
+run 0 
+change_box all boundary p p p
+reset_atom_ids
+write_data nptall.data
+
+
+
+

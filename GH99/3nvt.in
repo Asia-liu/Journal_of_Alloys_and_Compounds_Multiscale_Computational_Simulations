@@ -1,0 +1,69 @@
+##########################################################################
+#~/lammps/lammps-29Oct20/src/lmp_serial < ten.in
+# step 1: Generate atoms configuration
+##########################################################################
+log NiCrC_ten.txt
+units		    metal
+boundary	    s p s
+atom_style      full
+read_data       eq20_npt_2.data
+variable		randomseed equal 2345677
+################################################################################
+pair_style      meam/c
+pair_coeff      * *  library.meam Mo Co Ni V Fe Al Cr MoCoNiVFeAlCr.meam Cr Ni Co Fe Mo Al Ni
+###################################################################################
+displace_atoms all rotate 0 0 0 0 1 0 30 units box
+change_box all boundary p p p
+change_box		all 	x	delta	-1	1 y	delta	-1	1 z	delta	-1	1	
+#####################################
+thermo          1000
+thermo_style    custom step atoms temp etotal pe ke press vol density lx ly lz pxx pyy pzz pxy pxz pyz cpuremain
+thermo_modify   flush yes lost warn norm yes 
+##################################################################################
+#################################################################################################
+compute body_pe all pe/atom
+##################################################
+compute body_s all stress/atom NULL 
+#################################################
+compute strCs all reduce sum c_body_s[2]
+########################################################
+########################################################
+variable syyCs equal c_strCs/(14.625399*count(all))*(10^-4)
+variable syyb equal v_syyCs
+fix 33 all ave/time 1 100 100  v_syyb file stress_GPa.dat
+
+timestep 0.001
+variable p2 equal "-pxx/10000"
+variable p3 equal "-pyy/10000"
+variable p4 equal "-pzz/10000"
+variable p5 equal "-pxy/10000"
+variable p6 equal "-pxz/10000"
+variable p7 equal "-pyz/10000"
+variable p8 equal "pe"
+# Output stress and strain information to datafile for Matlab post-processing
+fix equil1 all print 100 "${p2} ${p3} ${p4} ${p5} ${p6} ${p7} ${p8}" file data.txt screen no
+
+fix             1 all npt temp 300.0 300.0 0.01 aniso 0.0 0.0 1.0 drag 1.8
+fix             2 all temp/rescale 5 300.0 300.0 0.1 1
+dump			nvt1	all	custom	5000	eq20_nvt.*	id	type	x	y	z		
+run		        30000 #fs = 1e-3 ps  200A 0.1 A/ps
+unfix 1
+unfix 2
+write_data      eq20_uniaxial_y.data
+change_box		all 	y	final	-450.0	450.0
+
+fix             13 all nvt temp 300.0 300.0 0.01
+fix             14 all temp/rescale 5 300.0 300.0 0.1 1
+
+# Setup file output (time in ps, pressure in GPa)
+run             10000
+undump			nvt1
+unfix           13
+unfix           14
+write_data      eq_nvt_300.data
+######################################
+# SIMULATION DONE
+print "All done"
+
+
+

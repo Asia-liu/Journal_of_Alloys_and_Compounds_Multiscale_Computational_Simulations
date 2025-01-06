@@ -1,0 +1,123 @@
+##########################################################################
+#~/lammps/lammps-29Oct20/src/lmp_serial < ten.in
+# step 1: Generate atoms configuration
+##########################################################################
+log Ni.txt
+units		    metal
+boundary	    s s p
+atom_style      full
+read_data       eq_nvt_300.data
+variable		randomseed equal 2345677
+################################################################################
+pair_style      meam/c
+pair_coeff      * *  library.meam Mo Co Ni V Fe Al Cr MoCoNiVFeAlCr.meam Cr Ni Co Fe Mo Al Ni
+###################################################################################
+thermo          5000
+thermo_style    custom step atoms temp etotal pe ke press vol density lx ly lz cpuremain
+thermo_modify   flush yes lost warn norm yes 
+##################################################################################
+# define groups 
+region          1 block INF INF INF -100 INF INF
+group           lower region 1
+region          2 block INF INF 100 INF INF INF
+group           upper region 2
+group           boundary union lower upper
+group           mobile subtract all boundary
+# define intersect groups
+reset_timestep	0
+# fixes
+compute 1 mobile temp
+compute_modify 1 dynamic yes
+fix		        15 all nvt temp 300 300 1.0
+fix             16 all temp/rescale 1 300 300 0.01 0.01
+#velocity        upper set 0.0 0.01 0.0
+#velocity        lower set 0.0 -0.01 0.0
+fix 19  upper move linear 0 0.01 0 units box
+fix 18  lower move linear 0 -0.01 0 units box
+fix             17 boundary setforce 0.0 0.0 0.0
+
+# compute
+compute         peratom all pe/atom
+compute         st mobile stress/atom NULL 
+compute         sta mobile reduce sum c_st[1] c_st[2] c_st[3]
+compute         peratoma mobile reduce ave c_peratom
+compute         dt mobile displace/atom
+variable        abs_dt_t1 atom abs(c_dt[1])
+variable        abs_dt_t2 atom abs(c_dt[2])
+variable        abs_dt_t3 atom abs(c_dt[3])
+variable        abs_dt_t4 atom abs(c_dt[4])
+compute         dta mobile reduce ave v_abs_dt_t1 v_abs_dt_t2 v_abs_dt_t3 v_abs_dt_t4
+
+
+
+variable        strain_x equal "(lx - v_L0_x)/v_L0_x"
+variable        strain_y equal "(ly - v_L0_y)/v_L0_y"
+variable        strain_z equal "(lz - v_L0_z)/v_L0_z"
+variable        p1 equal "v_strain_x"
+variable        p2 equal "v_strain_y"
+variable        p3 equal "v_strain_z"
+variable        p4 equal "(c_sta[1])/(vol*10000)"
+variable        p5 equal "(c_sta[2])/(vol*10000)"
+variable        p6 equal "(c_sta[3])/(vol*10000)"
+variable        p7 equal "c_dta[1]"
+variable        p8 equal "c_dta[2]"
+variable        p9 equal "c_dta[3]"
+variable        p10 equal "c_dta[4]"
+variable        p11 equal "c_peratoma"
+variable        p12 equal "0.02*step*0.01/200"
+variable        p15 equal "(c_sta[2])/(802338.4*10000)"
+fix             def0 mobile print 1600 "${p1} ${p2} ${p3} ${p4} ${p5} ${p6} ${p7} ${p8} ${p9} ${p10} ${p11}" file eq20_mobile.txt screen no
+fix				def_SS	mobile	print	1000	"${p12} ${p15} ${p2} ${p5}" file	eq20.txt	screen	no
+
+
+thermo 	        2000
+thermo_style    custom step temp pe press vol lx ly lz c_1 cpuremain
+
+
+#group g_cnt type 1 2 3 4 5 6
+compute body_temp mobile temp
+compute_modify body_temp dynamic yes
+compute body_pe all pe/atom
+##################################################
+compute body_s all stress/atom NULL 
+compute body_smp mobile stress/atom NULL 
+#################################################
+compute strCs all reduce sum c_body_s[2]
+compute strCmp mobile reduce sum c_body_smp[2]
+########################################################
+########################################################
+variable syyCs equal c_strCs/(14.625399*count(all))*(10^-4)
+variable syyCmp equal c_strCmp/(14.37934*count(mobile))*(10^-4)
+variable syyb equal v_syyCs
+variable syyd equal v_syyCmp
+variable syy equal v_p12
+
+
+fix 33 all ave/time 1 100 100 v_syy v_syyb v_syyd file stress_tensile_GPa.dat
+dump            111 all custom 10000 eq20_uniaxial.all_comp.* id type x y z c_st[1] c_st[2] c_st[3] c_dt[1] c_dt[2] c_dt[3] c_dt[4] c_peratom 
+timestep 0.002
+
+
+# Compute distance for each side of the grain boundary to displace
+variable ly1 equal 200
+variable strain equal 0.02
+variable ly0 equal ${ly1}
+variable lydelt equal "v_strain*v_ly0/2"
+variable lydelta equal "v_strain*0.002*step"
+variable p1 equal "(ly-v_ly0)/v_ly0"
+variable p2 equal "-pxx/10000"
+variable p3 equal "-pyy/10000"
+variable p4 equal "-pzz/10000"
+variable p5 equal "-pxy/10000"
+variable p6 equal "-pxz/10000"
+variable p7 equal "-pyz/10000"
+variable p8 equal "pe"
+variable q1 equal "v_lydelta"
+fix equil1 all print 100 "${p1} ${q1} ${p2} ${p3} ${p4} ${p5} ${p6} ${p7} ${p8}" file data.txt screen no
+
+run		        1500000 #fs = 1e-3 ps  200A 0.1 A/ps
+write_data      e_uniaxial_y0.data
+print "All done"
+
+
+
