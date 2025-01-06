@@ -1,0 +1,70 @@
+##########################################################################
+#~/lammps/lammps-29Oct20/src/lmp_serial < in1.txt
+# step 1: Generate atoms configuration
+##########################################################################
+# setting Variable
+log Ni62Cr22Co8Al5Mo3Fe1.txt
+variable		lat_cont	equal 3.53
+
+variable		fNi equal 62 #1
+variable 		fCr equal 22 #2
+variable 		fCo equal 8 #3
+variable 		fAl equal 5 #4
+variable 		fMo equal 3 #5
+variable 		fFe equal 1 #6
+variable		randomseed equal 2345674
+########################################################################
+units		metal
+boundary	s s s
+atom_style	full
+variable	lattice equal  ${lat_cont}
+
+lattice		fcc ${lattice} orient x 0 0 1 orient y  1 1 0 orient z -1 1 0
+region		sp sphere 0.0 0.0 0.0 100 units box
+create_box		7 sp
+
+#region sp sphere 0.0 0.0 0.0 100 units box
+
+#orient x 0 0 1 orient y  1 1 0 orient z -1 1 0
+lattice		custom 3.60 a1 1 0 0 a2 0 1 0 a3 0 0 1 & 
+basis 0 0 0 basis 0.5 0.5 0 basis 0.50000000  0.00000000  0.50000000 basis 0.00000000  0.50000000  0.50000000 
+create_atoms	7 region sp basis 1 6 basis 2 7 basis 3 7 basis 4 7
+
+
+
+group ro type 6 7
+displace_atoms ro rotate 0 0 0 0 1 0 90 units box
+displace_atoms ro rotate 0 0 0 0 0 1 45 units box
+
+region		a block -10 10 -10 10 -10 10 units box side out
+region		b block -10 10 30 50 -10 10 units box side out
+region		c block -10 10 70 90 -10 10 units box side out
+region		d block -10 10 -50 -30 -10 10 units box side out
+region		e block -10 10 -90 -70 -10 10 units box side out
+
+region ub intersect 5 a b c d e 
+#group ub region ub
+#region		ub block -8.5 8.5 -8.5 8.5 -8.5 8.5 units box side out
+group ub region ub
+
+mass 1 51.96
+mass 2 58.69
+mass 3 58.933
+mass 4 55.847
+mass 5 89.95999999999999
+mass                     6 26.98153860
+mass 7 58.69340000 
+
+#mass                     7 26.98153860
+#mass 8 58.69340000 
+
+delete_atoms group ub
+	
+neigh_modify	delay 1 check yes
+
+
+	
+########################################################################
+# step 2: write_data equimolar.data
+########################################################################
+write_data equbottom.data
